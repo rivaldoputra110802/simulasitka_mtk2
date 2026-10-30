@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CBT Les Ahe - TKA Matematika (Pengayaan)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- SDK FIREBASE -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-database-compat.js"></script>
+
+    <style>
+        body { overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; }
+        .konten-soal table { width: 100%; border-collapse: collapse; margin-bottom: 0.5rem; font-size: 0.85em; }
+        .konten-soal table, .konten-soal th, .konten-soal td { border: 1px solid #9ca3af; padding: 6px; text-align: left; }
+        .konten-soal img { max-width: 100%; max-height: 35vh; object-fit: contain; border-radius: 6px; margin: 0 auto 15px auto; display: block; }
+        input[type="radio"], input[type="checkbox"] { transform: scale(1.3); accent-color: #2563eb; cursor: pointer; flex-shrink: 0; }
+        .hidden { display: none !important; }
+        .waktu-habis { animation: pulse 1s infinite; background-color: #ef4444; color: white; border-color: #dc2626; }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans text-gray-800 min-h-screen">
+
+    <!-- ================= LAYAR LOGIN SISWA ================= -->
+    <div id="layar-login" class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-white p-8 rounded-xl shadow-lg max-w-md w-full border-t-4 border-blue-600">
+            <h1 class="text-2xl font-bold text-center text-blue-700 mb-2">Ujian TKA Matematika</h1>
+            <p class="text-center text-gray-500 mb-6">Waktu: 120 Menit (2 Jam)</p>
+            <div class="mb-6">
+                <label class="block text-gray-700 font-semibold mb-2">Nama Lengkap</label>
+                <input type="text" id="input-nama" class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold text-center" placeholder="Ketik namamu di sini...">
+            </div>
+            <button onclick="mulaiUjian()" class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition shadow-md mb-4">Mulai Kerjakan</button>
+            
+            <div class="text-center border-t pt-4">
+                <button onclick="bukaModalGuru()" class="text-xs text-gray-400 hover:text-purple-600 underline font-semibold transition">Masuk sebagai Guru (Lihat Daftar Nilai)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Sandi Guru (Disembunyikan) -->
+    <div id="modal-guru" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-4 z-50">
+        <div class="bg-white p-6 rounded-xl shadow-lg w-full max-w-xs text-center border-t-4 border-purple-500">
+            <h2 class="font-bold text-lg text-purple-700 mb-1">Akses Guru</h2>
+            <p class="text-xs text-gray-500 mb-4">Masukkan sandi khusus</p>
+            <!-- Input tipe password agar teks berubah jadi titik-titik (••••) -->
+            <input type="password" id="input-sandi-guru" placeholder="••••••••" class="w-full p-3 border rounded-lg text-center font-bold mb-4 focus:outline-none focus:border-purple-500 bg-gray-50">
+            <div class="flex gap-2">
+                <button onclick="tutupModalGuru()" class="flex-1 bg-gray-200 text-gray-700 font-bold py-2 rounded-lg hover:bg-gray-300">Batal</button>
+                <button onclick="prosesMasukGuru()" class="flex-1 bg-purple-600 text-white font-bold py-2 rounded-lg hover:bg-purple-700">Masuk</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= HALAMAN GURU (DAFTAR NILAI LIVE) ================= -->
+    <div id="guru-page" class="hidden p-4 max-w-3xl mx-auto mt-6">
+        <div class="bg-white p-6 rounded-2xl shadow-xl border-t-8 border-purple-600">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 border-b pb-3 gap-3">
+                <div>
+                    <h2 class="text-xl font-black text-purple-700">Daftar Nilai Siswa (Live)</h2>
+                    <p class="text-xs text-gray-500 font-medium">Ujian TKA Matematika (Otomatis)</p>
+                </div>
+                <div class="flex gap-2 w-full md:w-auto">
+                    <button onclick="kembaliKeLoginDariGuru()" class="flex-1 md:flex-none bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-bold py-2 px-4 rounded-lg transition">⬅️ Kembali</button>
+                    <button onclick="resetDatabaseGuru()" class="flex-1 md:flex-none bg-red-500 hover:bg-red-600 text-white text-xs font-bold py-2 px-4 rounded-lg shadow transition">🔄 Reset Nilai</button>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto bg-white border rounded-xl shadow-sm">
+                <table class="w-full text-left border-collapse min-w-max">
+                    <thead class="bg-purple-50 border-b">
+                        <tr>
+                            <th class="p-3 text-sm font-bold text-purple-900 w-10 text-center">No</th>
+                            <th class="p-3 text-sm font-bold text-purple-900">Nama Siswa</th>
+                            <th class="p-3 text-sm font-bold text-purple-900 text-center">Benar</th>
+                            <th class="p-3 text-sm font-bold text-purple-900 text-center">Skor</th>
+                            <th class="p-3 text-sm font-bold text-red-700">Nomor Soal yang Salah</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabel-hasil-siswa" class="divide-y divide-gray-200 text-sm"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= AREA UJIAN (CBT) ================= -->
+    <div id="area-ujian" class="hidden max-w-2xl mx-auto bg-white min-h-screen shadow-md relative pb-24">
+        <header class="bg-blue-600 text-white p-4 sticky top-0 z-10 shadow-md flex justify-between items-center gap-2">
+            <h1 class="font-bold text-base md:text-lg truncate" id="header-nama-siswa">TKA MTK</h1>
+            <div class="flex gap-2 items-center">
+                <span id="timer-display" class="bg-white text-blue-700 px-3 py-1 rounded-full text-sm font-bold border border-blue-300 shadow-inner shrink-0 tabular-nums">02:00:00</span>
+                <span id="nomor-soal-display" class="bg-blue-800 px-3 py-1 rounded-full text-sm font-semibold border border-blue-500 shrink-0">1/30</span>
+            </div>
+        </header>
+
+        <main class="p-5 konten-soal">
+            <div id="konten-wacana" class="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm md:text-base leading-relaxed hidden"></div>
+            <div id="konten-pertanyaan" class="font-bold text-gray-900 mb-5 text-base md:text-lg"></div>
+            <div id="wadah-pilihan" class="flex flex-col gap-3"></div>
+        </main>
+
+        <footer class="fixed bottom-0 w-full max-w-2xl bg-white border-t border-gray-200 p-4 flex justify-between gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+            <button id="btn-prev" onclick="gantiSoal(-1)" class="flex-1 py-3 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition hidden">Sebelumnya</button>
+            <button id="btn-next" onclick="gantiSoal(1)" class="flex-1 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition">Selanjutnya</button>
+            <button id="btn-selesai" onclick="kumpulkanJawaban(false)" class="flex-1 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition hidden">Selesai Ujian</button>
+        </footer>
+    </div>
+
+    <!-- ================= LAYAR HASIL ================= -->
+    <div id="layar-hasil" class="hidden flex items-center justify-center min-h-screen p-4">
+        <div class="bg-white p-8 rounded-xl shadow-lg max-w-md w-full border-t-4 border-green-500 text-center">
+            <h2 class="text-2xl font-bold text-gray-800 mb-2">Ujian Selesai!</h2>
+            <p class="text-gray-600 mb-6">Kerja bagus, <span id="nama-hasil" class="font-bold text-blue-600"></span>.</p>
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-6 mb-6">
+                <p class="text-sm text-gray-500 font-semibold mb-1">NILAI AKHIR</p>
+                <p id="skor-akhir" class="text-6xl font-extrabold text-blue-600 mb-2">100</p>
+                <p id="detail-benar-akhir" class="text-sm text-gray-500 font-semibold bg-white inline-block px-3 py-1 rounded shadow-sm"></p>
+            </div>
+            <button onclick="keluarKeAwal()" class="w-full bg-gray-200 text-gray-700 font-bold py-3 px-6 rounded-lg hover:bg-gray-300 transition">Kembali ke Awal</button>
+        </div>
+    </div>
+
+    <!-- ================= SCRIPT LOGIKA & DATABASE ================= -->
+    <script>
+        // ---------------------------------------------------------
+        // 1. KONFIGURASI FIREBASE ALDO
+        // ---------------------------------------------------------
+        const firebaseConfig = {
+            apiKey: "AIzaSyCoC3kabcXL-C9U_jhgLdcAmRcnqfVP4AQ",
+            authDomain: "simulasitka-62b3f.firebaseapp.com",
+            databaseURL: "https://simulasitka-62b3f-default-rtdb.firebaseio.com", 
+            projectId: "simulasitka-62b3f",
+            storageBucket: "simulasitka-62b3f.firebasestorage.app",
+            messagingSenderId: "1070761016017",
+            appId: "1:1070761016017:web:753a59214586d581c6a3f0",
+            measurementId: "G-54558PFC3R"
+        };
+        
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // ---------------------------------------------------------
+        // 2. KUMPULAN SOAL MTK (30 SOAL SESUAI PDF)
+        // ---------------------------------------------------------
+        const paketSoalTKA = [
+            // NO 1
+            {
+                tipe: "Pilihan Ganda",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Sekelompok nelayan di Pantai Padang, Sumatera Barat, mencatat hasil tangkapan ikan selama empat hari. Hasil pencatatan disajikan dalam sebuah pictogram berikut:</p><img src="soal1.png">`,
+                pertanyaan: "Selama empat hari, berapa kilogram ikan yang diperoleh kelompok nelayan tersebut?",
+                pilihan: ["88 kg", "92 kg", "94 kg", "98 kg"],
+                kunci: [2]
+            },
+            // NO 2
+            {
+                tipe: "Ganda Kompleks",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Pada kegiatan pameran karya dan pentas seni di sekolah, murid melakukan beberapa pengukuran untuk menyiapkan perlengkapan kegiatan.</p>`,
+                pertanyaan: "Manakah pernyataan yang menunjukkan hasil pengukuran yang paling tepat dan masuk akal?<br><span style='font-size: 0.85em; color: #3b82f6; font-weight: normal;'>Pilih semua jawaban yang benar! Jawaban benar lebih dari satu.</span>",
+                pilihan: [
+                    "Tinggi tiang bendera di halaman sekolah sekitar 8 meter.",
+                    "Lebar sebuah buku gambar yang digunakan untuk pameran sekitar 25 sentimeter.",
+                    "Jarak dari ruang kelas ke lapangan sekolah sekitar 30 milimeter.",
+                    "Panjang meja guru di dalam kelas sekitar 1,2 meter."
+                ],
+                kunci: [0, 1, 3]
+            },
+            // NO 3
+            {
+                tipe: "Pilihan Ganda",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Menjelang pameran karya kelas VI, murid menyiapkan lima keranjang oleh-oleh khas Sumatera Barat. Setiap keranjang berisi 12 bungkus keripik sanjai. Murid kemudian menambahkan 20 bungkus lagi. Semua keripik dikemas secara merata ke dalam 10 paket.</p>`,
+                pertanyaan: "Kalimat matematika yang tepat untuk menentukan banyak bungkus keripik dalam setiap paket adalah ....",
+                pilihan: [
+                    "5 &times; (12 + 20) : 10",
+                    "(5 &times; 12 + 20) : 10",
+                    "5 &times; 12 + 20 : 10",
+                    "(5 + 12 + 20) : 10"
+                ],
+                kunci: [1]
+            },
+            // NO 4
+            {
+                tipe: "Pilihan Ganda",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Panitia kegiatan Projek Kreativitas dan Kewirausahaan Sekolah menyiapkan 500 kantong kecil manik hias untuk dibagikan secara merata kepada 125 peserta. Setiap kantong memiliki massa 120 mg.</p>`,
+                pertanyaan: "Berapa gram manik hias yang diterima setiap peserta?",
+                pilihan: ["0,25 gram", "0,38 gram", "0,05 gram", "0,48 gram"],
+                kunci: [3]
+            },
+            // NO 5
+            {
+                tipe: "Pilihan Ganda",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Pada kegiatan Bazar Produk Lokal Minangkabau di sekolah, beberapa pelaku UMKM menawarkan karupuak sanjai dalam beberapa ukuran kemasan berikut.</p><img src="soal5.png">`,
+                pertanyaan: "Rafi ingin membeli karupuak sanjai dengan harga paling murah setiap kilogram agar memperoleh jumlah produk yang lebih banyak dengan uang yang sama. Paket manakah yang sebaiknya dipilih Rafi?",
+                pilihan: ["Paket A", "Paket B", "Paket C", "Paket D"],
+                kunci: [1]
+            },
+            // NO 6
+            {
+                tipe: "Pilihan Ganda",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Dalam kegiatan Gerakan Literasi Sekolah, guru mencatat jumlah buku yang selesai dibaca murid kelas VI selama satu bulan. Data disajikan pada tabel berikut.</p><img src="soal6.png">`,
+                pertanyaan: "Diagram batang yang benar adalah ....",
+                pilihan: [
+                    "<img src='jawabansoal6a.png' style='max-width: 250px;'>",
+                    "<img src='jawabansoal6b.png' style='max-width: 250px;'>",
+                    "<img src='jawabansoal6c.png' style='max-width: 250px;'>",
+                    "<img src='jawabansoal6d.png' style='max-width: 250px;'>"
+                ],
+                kunci: [2]
+            },
+            // NO 7
+            {
+                tipe: "Pilihan Ganda",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Murid menyusun pot tanaman dalam beberapa pola.</p><img src="soal7.png"><p style="margin-bottom: 10px; text-align: justify;">Banyak pot pada pola-pola awal adalah 4, 7, 10, 13, dan seterusnya.</p>`,
+                pertanyaan: "Banyak pot pada Pola 5 adalah ....",
+                pilihan: ["15 pot", "16 pot", "17 pot", "18 pot"],
+                kunci: [1]
+            },
+            // NO 8
+            {
+                tipe: "Pilihan Ganda",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Pada kegiatan Gerakan Literasi Sekolah 2026, sekolah menerima sejumlah buku bacaan yang akan disusun ke dalam sebuah kardus. Buku-buku tersebut menempati seperempat bagian dari seluruh ruang kardus, dengan volume buku 7.500 cm<sup>3</sup>. Sesuai pada gambar berikut:</p><img src="soal8.png">`,
+                pertanyaan: "Berapakah tinggi kardus tersebut?",
+                pilihan: ["15 cm", "20 cm", "30 cm", "40 cm"],
+                kunci: [2]
+            },
+            // NO 9
+            {
+                tipe: "Pilihan Ganda",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Dalam kegiatan penataan taman sekolah, Pak Rudi memiliki seutas tali pembatas sepanjang 3 dam. Ia menggunakan 15 dm tali untuk memasang pembatas di salah satu sisi taman. Sisa tali dipotong menjadi beberapa bagian yang masing-masing panjangnya 5 cm.</p>`,
+                pertanyaan: "Banyak potongan tali yang dapat dibuat Pak Rudi adalah ....",
+                pilihan: ["57 potongan tali", "258 potongan tali", "597 potongan tali", "570 potongan tali"],
+                kunci: [3]
+            },
+            // NO 10
+            {
+                tipe: "Pilihan Ganda",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Perhatikan grafik jumlah buku yang dibaca oleh lima murid. Grafik tersebut memuat jumlah buku untuk masing-masing murid.</p><img src="soal10.png">`,
+                pertanyaan: "Berapakah rata-rata jumlah buku yang dibaca kelima murid tersebut?",
+                pilihan: ["5 buku", "6 buku", "7 buku", "8 buku"],
+                kunci: [1]
+            },
+            // NO 11
+            {
+                tipe: "Benar Salah",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Pada kegiatan Bazar Produk Kreatif Minangkabau, murid kelas VI membantu menyiapkan beberapa cendera mata khas Sumatera Barat. Setiap benda telah ditimbang terlebih dahulu.</p><img src="soal11.png">`,
+                pertanyaan: "Tentukan Benar atau Salah pada setiap pernyataan berikut!",
+                pilihan: [
+                    "<img src='jawabansoal11a.png' style='max-width: 200px; display:inline;'>",
+                    "<img src='jawabansoal11b.png' style='max-width: 200px; display:inline;'>",
+                    "<img src='jawabansoal11c.png' style='max-width: 200px; display:inline;'>",
+                    "<img src='jawabansoal11d.png' style='max-width: 200px; display:inline;'>"
+                ],
+                kunci: ["0_B", "1_S", "2_S", "3_S"]
+            },
+            // NO 12
+            {
+                tipe: "Pilihan Ganda",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Dalam kegiatan Paket Makanan Sehat Sekolah, beberapa makanan disiapkan dalam bagian yang sama besar. Data yang diamati Rani ditunjukkan pada tabel berikut:</p><img src="soal12.png">`,
+                pertanyaan: "Pasangan makanan yang menunjukkan bagian yang sama besar adalah ....",
+                pilihan: [
+                    "Buah potong dan roti gandum",
+                    "Buah potong dan salad sayur",
+                    "Buah potong dan susu",
+                    "Roti gandum dan susu"
+                ],
+                kunci: [3]
+            },
+            // NO 13
+            {
+                tipe: "Pilihan Ganda",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Pada hari Sabtu, Raka mengikuti simulasi TKA SD 2026 di sekolah. Ia mengerjakan latihan soal secara tertib menggunakan komputer. Berikut adalah waktu kegiatan Raka:</p><img src="soal13.png">`,
+                pertanyaan: "Berapa lama Raka mengikuti simulasi TKA?",
+                pilihan: ["2 jam 15 menit", "2 jam 30 menit", "2 jam 45 menit", "3 jam 15 menit"],
+                kunci: [2]
+            },
+            // NO 14
+            {
+                tipe: "Benar Salah",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Sebuah kelompok kewirausahaan murid kelas VI menjual miniatur rumah gadang sebagai cendera mata. Penjualan selama lima hari dicatat dan disajikan dalam diagram batang. Data penjualan yang ditampilkan pada diagram berikut:</p><img src="soal14.png">`,
+                pertanyaan: "Berdasarkan diagram batang tersebut, tentukan Benar atau Salah pada setiap pernyataan berikut!",
+                pilihan: [
+                    "1. Kenaikan penjualan dari Senin ke Selasa lebih besar daripada kenaikan penjualan dari Rabu ke Kamis.",
+                    "2. Penjualan tertinggi selama kegiatan bazar terjadi pada hari Kamis.",
+                    "3. Penurunan penjualan terbesar terjadi dari hari Kamis ke Jumat."
+                ],
+                kunci: ["0_S", "1_B", "2_B"]
+            },
+            // NO 15
+            {
+                tipe: "Benar Salah",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Dua orang murid diundang pada kegiatan penyerahan medali Olimpiade Sains Nasional Tingkat provinsi, mereka berangkat menggunakan sepeda listrik menuju lokasi kegiatan yang berjarak 72 km. Seperti pada gambar berikut:</p><img src="soal15.png">`,
+                pertanyaan: "Tentukan Benar atau Salah pada setiap pernyataan berikut!",
+                pilihan: [
+                    "1. Sepeda A dan sepeda B tiba di lokasi pada waktu yang sama.",
+                    "2. Meskipun berangkat 30 menit lebih lambat, sepeda B tiba lebih dahulu daripada sepeda A.",
+                    "3. Jika kedua sepeda tidak beristirahat, keduanya akan tiba di lokasi pada waktu yang sama."
+                ],
+                kunci: ["0_S", "1_B", "2_B"]
+            },
+            // NO 16
+            {
+                tipe: "Pilihan Ganda",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Murid membuat pola dekorasi yang terinspirasi dari motif geometris Minangkabau. Pola tersebut tersusun dari beberapa segitiga yang berukuran sama seperti pada gambar:</p><img src="soal16.png">`,
+                pertanyaan: "Berapakah luas seluruh pola dekorasi tersebut?",
+                pilihan: ["135 cm<sup>2</sup>", "120 cm<sup>2</sup>", "150 cm<sup>2</sup>", "165 cm<sup>2</sup>"],
+                kunci: [3]
+            },
+            // NO 17
+            {
+                tipe: "Ganda Kompleks",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Sekolah akan menata kembali lingkungan sekolah agar menjadi lebih aman, sehat, nyaman, dan mendukung aktivitas belajar serta olahraga murid. Pada halaman sekolah akan dibuat area taman, jalan, lapangan olahraga, dan dua taman berbentuk lingkaran yang dilengkapi air mancur.</p><p style="margin-bottom: 10px; text-align: justify;">Perhatikan denah berikut!</p><img src="soal17.png">`,
+                pertanyaan: "Luas area jalan, olahraga, dan air mancur dengan kondisi yang ditentukan adalah ....<br><span style='font-size: 0.85em; color: #3b82f6; font-weight: normal;'>Pilihlah semua jawaban yang benar! Jawaban benar lebih dari satu.</span>",
+                pilihan: [
+                    "Luas jalan utama yang menghubungkan gerbang depan dan gerbang belakang adalah 900 m<sup>2</sup>.",
+                    "Luas jalan samping yang menghubungkan taman dengan pagar adalah 90 m<sup>2</sup>.",
+                    "Luas satu area air mancur berbentuk lingkaran adalah 154 m<sup>2</sup>.",
+                    "Jarak antara pusat air mancur pertama dan pusat air mancur kedua adalah 36 m."
+                ],
+                kunci: [1, 2]
+            },
+            // NO 18
+            {
+                tipe: "Pilihan Ganda",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Di sekolah akan diadakan kegiatan Padang Balomba. Panitia membuat papan dekorasi berbentuk persegi panjang untuk menampilkan motif geometris Minangkabau. Pada papan tersebut terdapat beberapa daerah yang diarsir sesuai gambar berikut:</p><img src="soal18.png">`,
+                pertanyaan: "Luas seluruh daerah yang diarsir adalah ... cm<sup>2</sup>.",
+                pilihan: ["120", "140", "160", "280"],
+                kunci: [0]
+            },
+            // NO 19
+            {
+                tipe: "Ganda Kompleks",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Perhatikan gambar berikut!</p><img src="soal19.png"><p style="margin-bottom: 10px; text-align: justify;">Saat hari Kampanye Keselamatan Sekolah, dibuat sebuah lencana untuk menandai Zona Aman Sekolah.</p>`,
+                pertanyaan: "Tentukan ciri-ciri bentuk lencana tersebut yang benar!<br><span style='font-size: 0.85em; color: #3b82f6; font-weight: normal;'>Jawaban benar lebih dari satu.</span>",
+                pilihan: [
+                    "Memiliki 8 sisi yang sama panjang.",
+                    "Memiliki 8 simetri lipat.",
+                    "Memiliki 8 simetri putar.",
+                    "Memiliki 4 simetri lipat."
+                ],
+                kunci: [0, 1, 2]
+            },
+            // NO 20
+            {
+                tipe: "Ganda Kompleks",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Untuk membuat hiasan pada pojok kelas, Sinta mengukur panjang pita menggunakan penggaris. Titik A dan titik B menunjukkan posisi awal pengukuran pada penggaris seperti pada gambar:</p><img src="soal20.png"><p style="margin-bottom: 10px; text-align: justify;">Guru meminta Sinta menambahkan panjang pita sebesar 3,5 cm dari hasil pengukuran awal.</p>`,
+                pertanyaan: "Pilih semua pernyataan yang benar tentang panjang pita sekarang!<br><span style='font-size: 0.85em; color: #3b82f6; font-weight: normal;'>Jawaban benar lebih dari satu.</span>",
+                pilihan: [
+                    "Panjang pita sekarang tepat 20,5 cm.",
+                    "Panjang pita sekarang tepat 20,05 cm.",
+                    "Panjang pita sekarang lebih dari 20 cm.",
+                    "Panjang pita sekarang kurang dari 20,05 cm."
+                ],
+                kunci: [0, 2]
+            },
+            // NO 21
+            {
+                tipe: "Benar Salah",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Dalam kegiatan edukasi gizi di sekolah, panitia menyiapkan 1 baki paket makanan sehat untuk 10 murid. Bahan untuk 1 baki sebagai berikut:</p><ul style="list-style-type: disc; margin-left: 20px; margin-bottom: 10px;"><li>0,25 kg beras</li><li>0,30 kg ayam</li><li>0,15 kg sayuran</li><li>0,20 kg buah</li><li>10 butir telur</li><li>0,10 kg kacang-kacangan</li></ul><p style="margin-bottom: 10px; text-align: justify;">Panitia akan menyiapkan makanan tersebut untuk 8 baki.</p>`,
+                pertanyaan: "Tentukan Benar atau Salah pernyataan berikut terkait bahan yang harus disiapkan!",
+                pilihan: [
+                    "1. Panitia membutuhkan 2 kg beras.",
+                    "2. Ayam yang harus disiapkan sebanyak 2,4 kg.",
+                    "3. Panitia perlu menyiapkan 1,5 kg sayuran.",
+                    "4. Buah yang dibutuhkan sebanyak 1,8 kg.",
+                    "5. Panitia membutuhkan 80 butir telur."
+                ],
+                kunci: ["0_B", "1_B", "2_S", "3_S", "4_B"]
+            },
+            // NO 22
+            {
+                tipe: "Benar Salah",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Di sekolah akan dilaksanakan Market Day dan akan didekorasi sebagus mungkin. Panitia membuat pola dekorasi geometris untuk menghias papan informasi acara. Pola tersebut tersusun dari beberapa bangun datar yang tidak saling beririsan.</p><img src="soal22.png">`,
+                pertanyaan: "Tentukan Benar atau Salah pada setiap pernyataan berikut!",
+                pilihan: [
+                    "1. Pola tersebut tersusun atas 3 segitiga dan 5 segiempat.",
+                    "2. Pola tersebut tersusun atas 3 segitiga dan 2 segiempat.",
+                    "3. Jumlah seluruh bangun datar yang menyusun pola tersebut adalah 8 bangun."
+                ],
+                kunci: ["0_S", "1_S", "2_B"]
+            },
+            // NO 23
+            {
+                tipe: "Pilihan Ganda",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Panitia kegiatan Padang Juara 2026 menyiapkan taman kecil berbentuk segitiga siku-siku. Panjang alas taman 6 meter dan tingginya 8 meter. Seluruh sisi taman akan dipasang pembatas dengan biaya Rp35.000,00 per meter.</p>`,
+                pertanyaan: "Berapakah total biaya yang diperlukan untuk memasang pembatas di sekeliling taman tersebut?",
+                pilihan: ["Rp490.000,00", "Rp630.000,00", "Rp805.000,00", "Rp840.000,00"],
+                kunci: [3]
+            },
+            // NO 24
+            {
+                tipe: "Pilihan Ganda",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Pada kegiatan bazar sekolah, beberapa produk mendapatkan potongan harga seperti pada tabel berikut.</p><img src="soal24.png">`,
+                pertanyaan: "Dina membeli satu paket roti. Berdasarkan tabel tersebut, harga yang harus dibayar Dina setelah mendapat diskon adalah ....",
+                pilihan: ["Rp18.000", "Rp20.000", "Rp22.000", "Rp23.000"],
+                kunci: [1]
+            },
+            // NO 25
+            {
+                tipe: "Pilihan Ganda",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Sekolah memiliki persediaan air untuk menyiram tanaman sebanyak 750 ml. Penjaga sekolah menambahkan 2 dm<sup>3</sup> air dari sebuah wadah. Setelah itu, datang tambahan air sebanyak 3.250 cm<sup>3</sup>.</p>`,
+                pertanyaan: "Jumlah seluruh persediaan air tersebut adalah .... liter.",
+                pilihan: ["4,25 liter", "5 liter", "5,75 liter", "6 liter"],
+                kunci: [3]
+            },
+            // NO 26
+            {
+                tipe: "Pilihan Ganda",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Perhatikan gambar berikut!</p><img src="soal26.png"><p style="margin-bottom: 10px; text-align: justify;">Dalam kegiatan Projek Kreativitas dan Numerasi Sekolah, Rafi membuat miniatur menara jam menggunakan kubus-kubus kecil berukuran sama. Kubus disusun bertingkat sehingga membentuk menara yang semakin tinggi ke bagian tengah.</p>`,
+                pertanyaan: "Berdasarkan susunan kubus pada gambar, berapa banyak kubus yang digunakan Rafi seluruhnya?",
+                pilihan: ["23 kubus", "25 kubus", "27 kubus", "29 kubus"],
+                kunci: [3]
+            },
+            // NO 27
+            {
+                tipe: "Pilihan Ganda",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Pada kegiatan Gelar Karya dan Bazar Kearifan Lokal Sumatera Barat 2026 di sekolah, murid memilih makanan tradisional yang paling mereka sukai. Hasil pendataan ditunjukkan pada tabel berikut.</p><img src="soal27.png">`,
+                pertanyaan: "Data tersebut akan disajikan dalam bentuk diagram batang. Diagram batang yang tepat harus menunjukkan ....",
+                pilihan: [
+                    "<img src='jawabansoal27a.png' style='max-width: 250px;'>",
+                    "<img src='jawabansoal27b.png' style='max-width: 250px;'>",
+                    "<img src='jawabansoal27c.png' style='max-width: 250px;'>",
+                    "<img src='jawabansoal27d.png' style='max-width: 250px;'>"
+                ],
+                kunci: [2]
+            },
+            // NO 28
+            {
+                tipe: "Pilihan Ganda",
+                wacana: `<img src="soal28.png"><p style="margin-bottom: 10px; text-align: justify;">Seorang murid sedang mengamati beberapa sudut pada pola atap gonjong Rumah Gadang yang digunakan sebagai inspirasi desain hiasan pada kegiatan Gelar Budaya Minangkabau. Setiap sudut diberi tanda P, Q, R, S, dan T.</p>`,
+                pertanyaan: "Tentukan jenis sudut P, R, dan T secara berurutan!",
+                pilihan: [
+                    "Lancip, siku-siku, tumpul",
+                    "Tumpul, lancip, siku-siku",
+                    "Lancip, tumpul, siku-siku",
+                    "Siku-siku, lancip, tumpul"
+                ],
+                kunci: [2]
+            },
+            // NO 29
+            {
+                tipe: "Pilihan Ganda",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Perhatikan informasi kegiatan berikut.</p><img src="soal29.png"><p style="margin-bottom: 10px; text-align: justify;">Kegiatan Kelas Olimpiade dan Kelas BerNALAR dilaksanakan bersamaan pada hari ini. Pada hari yang sama, buku tulis dan pensil dibagikan ke dalam paket sebanyak mungkin dengan isi setiap paket sama banyak dan tidak tersisa.</p>`,
+                pertanyaan: "Pasangan hasil KPK dan FPB yang tepat adalah ....",
+                pilihan: [
+                    "KPK = 12 hari dan FPB = 24 paket",
+                    "KPK = 24 hari dan FPB = 12 paket",
+                    "KPK = 24 hari dan FPB = 24 paket",
+                    "KPK = 48 hari dan FPB = 24 paket"
+                ],
+                kunci: [2]
+            },
+            // NO 30
+            {
+                tipe: "Ganda Kompleks",
+                wacana: `<p style="margin-bottom: 10px; text-align: justify;">Perhatikan situasi berikut!</p><p style="margin-bottom: 10px; text-align: justify;">Murid kelas VI ikut membantu menyiapkan keripik balado khas Minangkabau untuk dibagikan dalam paket oleh-oleh peserta. Panitia memiliki 6 kg keripik balado yang harus dikemas hingga habis tanpa tersisa.</p><p style="margin-bottom: 6px; text-align: justify;">Tersedia tiga ukuran kemasan:</p><ul style="list-style-type: disc; margin-left: 20px; margin-bottom: 10px;"><li>Kemasan A = 1,25 kg</li><li>Kemasan B = 0,75 kg</li><li>Kemasan C = 0,5 kg</li></ul>`,
+                pertanyaan: "Manakah kombinasi kemasan yang dapat digunakan untuk mengemas seluruh 6 kg keripik balado tanpa sisa?<br><span style='font-size: 0.85em; color: #3b82f6; font-weight: normal;'>Pilih semua jawaban yang benar! Jawaban benar lebih dari satu.</span>",
+                pilihan: [
+                    "2 kemasan A, 4 kemasan B, dan 1 kemasan C",
+                    "1 kemasan A, 5 kemasan B, dan 2 kemasan C",
+                    "3 kemasan A, 1 kemasan B, dan 3 kemasan C",
+                    "4 kemasan A, 1 kemasan B, dan 1 kemasan C"
+                ],
+                kunci: [0, 1, 2]
+            }
+        ];
+
+        // ---------------------------------------------------------
+        // 3. LOGIKA APLIKASI (AMAN REFRESH & TIMER)
+        // ---------------------------------------------------------
+        let timerSiswa = null;
+        let currentIndex = 0;
+        let jawabanSiswa = []; 
+        let ujianSelesai = false; 
+        let namaSiswaAktif = ""; 
+
+        // AUTO-LOGIN JIKA SEBELUMNYA REFRESH
+        window.onload = function() {
+            if (localStorage.getItem('nama_mtk_acak_aktif')) {
+                const savedIndex = localStorage.getItem('index_mtk_acak_aktif');
+                if (savedIndex) currentIndex = parseInt(savedIndex);
+                masukSiswa(true);
+            }
+        };
+
+        // FUNGSI GURU
+        function bukaModalGuru() { document.getElementById('modal-guru').classList.remove('hidden'); }
+        function tutupModalGuru() { document.getElementById('modal-guru').classList.add('hidden'); document.getElementById('input-sandi-guru').value = ''; }
+        
+        function prosesMasukGuru() {
+            const sandi = document.getElementById('input-sandi-guru').value;
+            if (sandi === 'ALDO123') {
+                tutupModalGuru();
+                document.getElementById('layar-login').classList.add('hidden');
+                document.getElementById('guru-page').classList.remove('hidden');
+                muatDaftarNilaiGuru();
+            } else {
+                alert("Sandi salah! Silakan coba lagi.");
+            }
+        }
+
+        function muatDaftarNilaiGuru() {
+            db.ref('tka_mtk/hasil').on('value', (snapshot) => {
+                const data = snapshot.val();
+                const tabel = document.getElementById('tabel-hasil-siswa');
+                tabel.innerHTML = '';
+                
+                if (data) {
+                    let nomor = 1;
+                    for (const key in data) {
+                        const item = data[key];
+                        const listSalah = item.salah || '-';
+                        tabel.innerHTML += `
+                            <tr class="hover:bg-gray-50 border-b">
+                                <td class="p-3 text-center font-bold text-gray-500">${nomor++}</td>
+                                <td class="p-3 text-gray-800 font-bold">${item.nama}</td>
+                                <td class="p-3 text-center text-gray-600">${item.benar} / ${paketSoalTKA.length}</td>
+                                <td class="p-3 text-center font-black text-blue-600 text-lg">${item.nilai}</td>
+                                <td class="p-3 text-sm font-semibold text-red-500 max-w-xs break-words">${listSalah}</td>
+                            </tr>
+                        `;
+                    }
+                } else {
+                    tabel.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-gray-400">Belum ada nilai yang masuk.</td></tr>`;
+                }
+            });
+        }
+
+        function kembaliKeLoginDariGuru() {
+            document.getElementById('guru-page').classList.add('hidden');
+            document.getElementById('layar-login').classList.remove('hidden');
+        }
+
+        function resetDatabaseGuru() {
+            if (confirm("Yakin ingin menghapus semua nilai siswa dari database?")) {
+                db.ref('tka_mtk/hasil').set(null).then(() => { alert("Tabel nilai berhasil dikosongkan!"); });
+            }
+        }
+
+        // FUNGSI SISWA
+        function mulaiUjian() {
+            masukSiswa(false);
+        }
+
+        function masukSiswa(isAuto = false) {
+            if (!isAuto) {
+                namaSiswaAktif = document.getElementById('input-nama').value.trim();
+                if(!namaSiswaAktif) { alert("Namamu belum diisi, ayo isi dulu!"); return; }
+                localStorage.setItem('nama_mtk_acak_aktif', namaSiswaAktif); 
+                currentIndex = 0;
+            } else {
+                namaSiswaAktif = localStorage.getItem('nama_mtk_acak_aktif');
+            }
+
+            const savedJawaban = localStorage.getItem('jawaban_mtk_acak_' + namaSiswaAktif);
+            if (savedJawaban) {
+                jawabanSiswa = JSON.parse(savedJawaban);
+            } else {
+                jawabanSiswa = Array.from({length: paketSoalTKA.length}, () => []);
+            }
+            
+            ujianSelesai = false;
+            
+            document.getElementById('layar-login').classList.add('hidden');
+            document.getElementById('area-ujian').classList.remove('hidden');
+            document.getElementById('header-nama-siswa').innerText = namaSiswaAktif;
+            
+            renderSoal(currentIndex);
+            if(!timerSiswa) { mulaiTimerLokal(120); } // 2 Jam
+        }
+
+        function mulaiTimerLokal(menit) {
+            let endTimeSiswa = localStorage.getItem('endtime_mtk_acak_' + namaSiswaAktif);
+            
+            if (!endTimeSiswa) {
+                endTimeSiswa = Date.now() + (menit * 60 * 1000);
+                localStorage.setItem('endtime_mtk_acak_' + namaSiswaAktif, endTimeSiswa);
+            } else {
+                endTimeSiswa = parseInt(endTimeSiswa);
+            }
+
+            const timerElemen = document.getElementById('timer-display');
+            clearInterval(timerSiswa);
+            
+            timerSiswa = setInterval(() => {
+                const sisa = endTimeSiswa - Date.now();
+                if (sisa <= 0) {
+                    clearInterval(timerSiswa);
+                    timerElemen.innerText = "00:00:00";
+                    if(!ujianSelesai) {
+                        alert("Waktu Habis! Jawabanmu otomatis dikumpulkan.");
+                        kumpulkanJawaban(true);
+                    }
+                } else {
+                    const totalDetik = Math.floor(sisa / 1000);
+                    const jam = Math.floor(totalDetik / 3600);
+                    const mnt = Math.floor((totalDetik % 3600) / 60);
+                    const dtk = totalDetik % 60;
+                    
+                    let formatWaktu = `${jam.toString().padStart(2, '0')}:${mnt.toString().padStart(2, '0')}:${dtk.toString().padStart(2, '0')}`;
+                    timerElemen.innerText = formatWaktu;
+
+                    if (totalDetik <= 180) { timerElemen.classList.add('waktu-habis'); } 
+                    else { timerElemen.classList.remove('waktu-habis'); }
+                }
+            }, 1000);
+        }
+
+        function gantiSoal(arah) { 
+            simpanJawabanSaatIni(); 
+            const newIndex = currentIndex + arah;
+            if (newIndex >= 0 && newIndex < paketSoalTKA.length) {
+                currentIndex = newIndex;
+                renderSoal(currentIndex);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        }
+
+        function simpanJawabanSaatIni() {
+            const container = document.getElementById('wadah-pilihan');
+            const inputs = container.querySelectorAll('input:checked');
+            
+            jawabanSiswa[currentIndex] = Array.from(inputs).map(el => {
+                return el.value.includes('_') ? el.value : parseInt(el.value);
+            });
+            
+            if (namaSiswaAktif) {
+                localStorage.setItem('jawaban_mtk_acak_' + namaSiswaAktif, JSON.stringify(jawabanSiswa));
+                localStorage.setItem('index_mtk_acak_aktif', currentIndex);
+            }
+        }
+
+        function renderSoal(indeks) {
+            const s = paketSoalTKA[indeks];
+            document.getElementById('nomor-soal-display').innerText = `${indeks + 1}/${paketSoalTKA.length}`;
+            
+            const wadahWacana = document.getElementById('konten-wacana');
+            if (s.wacana) { 
+                wadahWacana.classList.remove('hidden'); 
+                wadahWacana.innerHTML = s.wacana; 
+            } else { 
+                wadahWacana.classList.add('hidden'); 
+            }
+            
+            document.getElementById('konten-pertanyaan').innerHTML = s.pertanyaan;
+            const containerPilihan = document.getElementById('wadah-pilihan');
+            containerPilihan.innerHTML = '';
+            
+            const savedAns = jawabanSiswa[indeks] || []; 
+
+            if (s.tipe === 'Benar Salah') {
+                let htmlTable = `
+                    <div class="overflow-hidden border border-blue-300 rounded-xl mb-2 shadow-sm">
+                    <table class="w-full text-sm text-left" style="border:none;">
+                        <thead class="bg-blue-100 text-blue-900 font-bold" style="border-bottom: 2px solid #93c5fd;">
+                            <tr>
+                                <th class="p-3" style="border:none;">Pernyataan</th>
+                                <th class="p-3 text-center w-16" style="border:none;">Benar</th>
+                                <th class="p-3 text-center w-16" style="border:none;">Salah</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white">
+                `;
+                s.pilihan.forEach((pil, i) => {
+                    const valB = i + "_B";
+                    const valS = i + "_S";
+                    const isCheckedB = savedAns.includes(valB) ? "checked" : "";
+                    const isCheckedS = savedAns.includes(valS) ? "checked" : "";
+                    
+                    htmlTable += `
+                        <tr class="hover:bg-blue-50 transition" style="border-bottom: 1px solid #e5e7eb;">
+                            <td class="p-3 text-gray-700 leading-snug" style="border:none;">${pil}</td>
+                            <td class="p-3 text-center align-middle" style="border:none; border-left: 1px solid #e5e7eb;">
+                                <input type="radio" name="bs_${i}" value="${valB}" ${isCheckedB} onchange="simpanJawabanSaatIni()" class="w-5 h-5 accent-blue-600 cursor-pointer">
+                            </td>
+                            <td class="p-3 text-center align-middle" style="border:none; border-left: 1px solid #e5e7eb;">
+                                <input type="radio" name="bs_${i}" value="${valS}" ${isCheckedS} onchange="simpanJawabanSaatIni()" class="w-5 h-5 accent-blue-600 cursor-pointer">
+                            </td>
+                        </tr>
+                    `;
+                });
+                htmlTable += `</tbody></table></div>`;
+                containerPilihan.innerHTML = htmlTable;
+            } else {
+                const type = s.tipe === 'Ganda Kompleks' ? 'checkbox' : 'radio';
+                s.pilihan.forEach((pil, i) => {
+                    const isChecked = savedAns.includes(i) ? "checked" : "";
+                    containerPilihan.innerHTML += `
+                        <label class="flex items-center gap-3 p-3 bg-white border border-gray-300 rounded-lg mb-2 cursor-pointer hover:bg-blue-50 active:bg-blue-100 transition shadow-sm">
+                            <input type="${type}" name="jawaban" value="${i}" ${isChecked} onchange="simpanJawabanSaatIni()" class="w-5 h-5 text-blue-600">
+                            <span class="text-gray-800 font-medium text-sm md:text-base leading-snug w-full">${pil}</span>
+                        </label>
+                    `;
+                });
+            }
+
+            const btnPrev = document.getElementById('btn-prev');
+            const btnNext = document.getElementById('btn-next');
+            const btnSelesai = document.getElementById('btn-selesai');
+
+            if (indeks === 0) {
+                btnPrev.classList.add('hidden');
+            } else {
+                btnPrev.classList.remove('hidden');
+            }
+
+            if (indeks === paketSoalTKA.length - 1) {
+                btnNext.classList.add('hidden');
+                btnSelesai.classList.remove('hidden');
+            } else {
+                btnNext.classList.remove('hidden');
+                btnSelesai.classList.add('hidden');
+            }
+        }
+
+        function kumpulkanJawaban(autoSubmit) {
+            simpanJawabanSaatIni();
+            
+            if (!autoSubmit) {
+                let totalTerjawab = jawabanSiswa.filter(ans => ans && ans.length > 0).length;
+                if (totalTerjawab < paketSoalTKA.length) {
+                    if (!confirm(`Ada ${paketSoalTKA.length - totalTerjawab} soal belum dijawab. Yakin selesai?`)) return;
+                } else {
+                    if (!confirm(`Semua soal telah terjawab. Kumpulkan sekarang?`)) return;
+                }
+            }
+
+            ujianSelesai = true;
+            clearInterval(timerSiswa);
+            document.getElementById('area-ujian').classList.add('hidden');
+            document.getElementById('layar-hasil').classList.remove('hidden');
+
+            let benar = 0;
+            let soalSalah = [];
+            const total = paketSoalTKA.length;
+
+            paketSoalTKA.forEach((soal, i) => {
+                const jawab = jawabanSiswa[i] || [];
+                const kunci = soal.kunci || [];
+
+                let isBenar = false;
+                if (jawab.length === kunci.length && kunci.every(val => jawab.includes(val))) {
+                    benar++;
+                    isBenar = true;
+                }
+
+                if (!isBenar) {
+                    soalSalah.push(i + 1); // Simpan nomor soal (mulai dari 1)
+                }
+            });
+
+            const nilaiAkhir = Math.round((benar / total) * 100);
+            const teksSalah = soalSalah.length > 0 ? soalSalah.join(', ') : '-';
+            
+            document.getElementById('nama-hasil').innerText = namaSiswaAktif;
+            document.getElementById('skor-akhir').innerText = nilaiAkhir;
+            document.getElementById('detail-benar-akhir').innerText = `Benar ${benar} dari ${total} soal`;
+
+            // SIMPAN KE FIREBASE
+            const keyAman = namaSiswaAktif.replace(/[.#$\[\]\/]/g, '_');
+            db.ref('tka_mtk/hasil/' + keyAman).set({
+                nama: namaSiswaAktif,
+                benar: benar,
+                nilai: nilaiAkhir,
+                salah: teksSalah
+            });
+
+            // Hapus Sesi Ujian di LocalStorage agar perangkat bisa dipakai anak lain
+            localStorage.removeItem('nama_mtk_acak_aktif');
+            localStorage.removeItem('jawaban_mtk_acak_' + namaSiswaAktif);
+            localStorage.removeItem('index_mtk_acak_aktif');
+            localStorage.removeItem('endtime_mtk_acak_' + namaSiswaAktif);
+        }
+
+        function keluarKeAwal() {
+            location.reload();
+        }
+    </script>
+</body>
+</html>
